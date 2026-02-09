@@ -1,8 +1,16 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+import os
 
-# replace YOUR_PASSWORD with your PostgreSQL password
-DATABASE_URL = "postgresql+psycopg://postgres:Unimas!021112131121@localhost:5432/codemark_fyp_database"
+# Load environment variables from .env file
+load_dotenv()
+
+# Get database URL from environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL not found in environment variables. Please create a .env file.")
 
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
