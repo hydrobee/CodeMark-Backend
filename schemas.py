@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 
 class UserRole(str, Enum):
     STUDENT = "student"
@@ -14,9 +15,9 @@ class UserRegister(BaseModel):
     password: str
     role: UserRole
     # Additional fields based on role
-    matric_no: str = None  # For students
-    group_no: str = None   # For students
-    staff_id: str = None   # For lecturers
+    matric_no: Optional[str] = None
+    group_no: Optional[str] = None
+    staff_id: Optional[str] = None
 
 # User Login
 class UserLogin(BaseModel):
@@ -61,17 +62,35 @@ class LecturerBase(BaseModel):
     name: str
     email: str
 
-class LecturerOut(LecturerBase):
+class LecturerOut(BaseModel):
     lecturer_id: int
     staff_id: str
+    user_id: int
+    name: str = None  # from user relationship
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 class StudentOut(BaseModel):
     matric_no: str
     group_no: str
     user_id: int
+    name: str = None  # from user relationship
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
+
+# Feedback
+class FeedbackCreate(BaseModel):
+    assignment_id : int
+    student_id : str
+    comments: str
+
+class FeedbackOut(BaseModel):
+    feedback_id: int
+    assignment_id: int
+    lecturer_id: int
+    student_id: str
+    comments: str | None
+
+    model_config = {
+        "from_attributes": True  
+    }

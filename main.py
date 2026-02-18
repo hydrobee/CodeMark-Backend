@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 from models import Base
-from routers import lecturer, assignment, auth, student, administrator
+from routers import lecturer, assignment, auth, student, administrator, feedback
 
 app = FastAPI(
     title="CodeMark Backend",
@@ -28,6 +28,7 @@ app.include_router(student.router)
 app.include_router(lecturer.router)
 app.include_router(administrator.router)
 app.include_router(assignment.router)
+app.include_router(feedback.router)
 
 @app.get("/")
 def root():
@@ -40,6 +41,7 @@ def root():
             "student": "/student",
             "lecturer": "/lecturer",
             "administrator": "/admin",
-            "assignments": "/assignments"
+            "assignments": "/assignments",
+            "feedback": "/feedback"
         }
     }
