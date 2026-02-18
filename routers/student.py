@@ -33,22 +33,13 @@ def get_current_student(current_user: User = Depends(get_current_user), db: Sess
     return student
 
 @router.get("/assignments", response_model=List[AssignmentOut])
-def get_available_assignments(
+def view_assignments(
     student: Student = Depends(get_current_student),
     db: Session = Depends(get_db)
 ):
     """Get all available assignments for the student"""
     assignments = db.query(AssignmentDB).all()
     return assignments
-
-@router.get("/my-submissions")
-def get_my_submissions(
-    student: Student = Depends(get_current_student),
-    db: Session = Depends(get_db)
-):
-    """Get assignments submitted by this student"""
-    # You'll need to create a Submission model for this
-    return {"message": "Submissions endpoint - implement after creating Submission model"}
 
 @router.post("/submit-assignment/{assignment_id}")
 def submit_assignment(
@@ -72,6 +63,15 @@ def submit_assignment(
         "message": f"Student {student.matric_no} submitting assignment {assignment_id}",
         "assignment": assignment
     }
+
+@router.get("/my-submissions")
+def get_my_submissions(
+    student: Student = Depends(get_current_student),
+    db: Session = Depends(get_db)
+):
+    """Get assignments submitted by this student"""
+    # You'll need to create a Submission model for this
+    return {"message": "Submissions endpoint - implement after creating Submission model"}
 
 @router.get("/profile")
 def get_student_profile(
