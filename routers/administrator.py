@@ -86,15 +86,24 @@ def update_lecturer_status(
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
+    action = action.lower()
+
     if action not in ["approved", "rejected", "approve", "reject"]:
-        raise HTTPException(status_code=400, detail="Action must be 'approved' or 'rejected'")
-    
+        raise HTTPException(status_code=400, detail="Action must be approve/approved or reject/rejected")
+
+    # normalize value
+    if action == "approve":
+        action = "approved"
+    elif action == "reject":
+        action = "rejected"
+
     lecturer = db.query(Lecturer).filter(Lecturer.lecturer_id == lecturer_id).first()
     if not lecturer:
         raise HTTPException(status_code=404, detail="Lecturer not found")
-    
+
     lecturer.status = action
     db.commit()
+
     return {"message": f"Lecturer {action} successfully"}
 
 @router.delete("/user/{user_id}")

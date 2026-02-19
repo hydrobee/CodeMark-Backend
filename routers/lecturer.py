@@ -43,10 +43,13 @@ def get_my_assignments(
     lecturer: Lecturer = Depends(get_current_lecturer),
     db: Session = Depends(get_db)
 ):
-    """Get assignments created by the authenticated lecturer"""
     assignments = db.query(AssignmentDB).filter(
         AssignmentDB.lecturer_id == lecturer.lecturer_id
     ).all()
+
+    if not assignments:
+        return []
+    
     return assignments
 
 @router.post("/create-assignment", response_model=AssignmentOut, status_code=status.HTTP_201_CREATED)
