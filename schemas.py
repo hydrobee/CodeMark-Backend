@@ -43,6 +43,7 @@ class Token(BaseModel):
 # Assignment
 class Assignment(BaseModel):
     lecturer_id: int
+    course_name: str
     title: str
     description: str
     deadline: datetime
@@ -51,6 +52,7 @@ class Assignment(BaseModel):
 class AssignmentOut(BaseModel):
     assignment_id: int
     lecturer_id: int
+    course_name: str
     title: str
     description: str
     deadline: datetime
@@ -93,4 +95,36 @@ class FeedbackOut(BaseModel):
 
     model_config = {
         "from_attributes": True  
+    }
+
+class SubmissionCreate(BaseModel):
+    assignment_id: int
+
+class SubmissionOut(BaseModel):
+    submission_id: int
+    assignment_id: int
+    student_id: str
+    file_name: str
+    file_path: str
+    file_type: str
+    submitted_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class GradeCreate(BaseModel): # field that user send in
+    submission_id: int
+    final_score: float
+    student_id: str
+
+class GradeOut(BaseModel):
+    grade_id: int
+    submission_id: int
+    student_id: str
+    final_score: float
+    approved: bool = False
+
+    model_config = {
+        "from_attributes": True
     }

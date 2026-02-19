@@ -69,6 +69,7 @@ def create_assignment(
 
     assignment_obj = AssignmentDB(
         lecturer_id=data.lecturer_id,
+        course_name= data.course_name,
         title=data.title,
         description=data.description,
         deadline=data.deadline

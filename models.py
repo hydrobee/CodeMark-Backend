@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Enum, ForeignKey, Float, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 import enum
+from datetime import datetime
 
 Base = declarative_base()
 
@@ -42,6 +43,7 @@ class AssignmentDB(Base):
     
     assignment_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     lecturer_id = Column(Integer, ForeignKey('lecturers.lecturer_id'), nullable=False)
+    course_name = Column(String, nullable=False)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     deadline = Column(DateTime, nullable=False)
@@ -54,3 +56,29 @@ class Feedback(Base):
     lecturer_id = Column(Integer, ForeignKey("lecturers.lecturer_id"), nullable=False)
     student_id = Column(String, ForeignKey("students.matric_no"), nullable=False)
     comments = Column(Text, nullable=True)
+
+class Submission(Base):
+    __tablename__ = "submission_list"
+
+    submission_id = Column(Integer, primary_key=True, autoincrement=True)
+    assignment_id = Column(Integer, ForeignKey("assignment_list.assignment_id"), nullable=False)
+    student_id = Column(String, ForeignKey("students.matric_no"), nullable=False)
+
+    # Submission File Info
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)
+
+    submitted_at = Column(DateTime, nullable=False)
+
+    student = relationship("Student")
+    assignment = relationship("AssignmentDB")
+
+class Grade(Base):
+    __tablename__ = "grade_list"
+
+    grade_id = Column(Integer, primary_key=True, autoincrement=True)
+    submission_id = Column(Integer,ForeignKey("submission_list.submission_id"), nullable=False)
+    student_id = Column(String, ForeignKey("students.matric_no"), nullable=False)
+    final_score = Column(Float, nullable=True)
+    approved = Column(Boolean, nullable=False, default=False)
