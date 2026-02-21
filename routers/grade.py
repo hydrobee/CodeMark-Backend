@@ -97,6 +97,7 @@ def final_score(
 
     return final_score_approval
 
+# Lecturer approve grade
 @router.patch("/{grade_id}/approve")
 def approve_grade(
     grade_id: int,

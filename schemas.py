@@ -56,6 +56,10 @@ class AssignmentOut(BaseModel):
     title: str
     description: str
     deadline: datetime
+    status: str
+    submission_id: Optional[str] = None
+    feedback: Optional[str] = None
+    grade: Optional[float] = None
 
     class Config:
         from_attributes = True

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import Student, AssignmentDB, User, Submission  
+from models import Student, AssignmentDB, User, Submission, Feedback, Grade 
 from schemas import AssignmentOut, SubmissionOut, SubmissionCreate
 from typing import List
 from auth import get_current_user
@@ -24,12 +24,55 @@ def get_current_student(current_user: User = Depends(get_current_user), db: Sess
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found")
     return student
 
-@router.get("/assignments", response_model=List[AssignmentOut])
+@router.get("/", response_model=List[AssignmentOut])
 def view_assignments(
     student: Student = Depends(get_current_student),
     db: Session = Depends(get_db)
 ):
-    return db.query(AssignmentDB).all()
+    assignments = db.query(AssignmentDB).all()
+    result = []
+
+    for assignment in assignments:
+        submission = db.query(Submission).filter(
+            Submission.assignment_id == assignment.assignment_id,
+            Submission.student_id == student.matric_no
+        ).first()
+
+        status_text = "Pending for submission"
+        feedback_text = None
+        grade_score = None
+
+        if submission:
+            status_text = "Submitted"
+
+            feedback = db.query(Feedback).filter(
+                Feedback.assignment_id == assignment.assignment_id,
+                Feedback.student_id == student.matric_no
+            ).first()
+            if feedback:
+                feedback_text = feedback.comments
+
+            grade = db.query(Grade).filter(
+                Grade.submission_id == submission.submission_id
+            ).first()
+            if grade:
+                grade_score = grade.final_score
+
+        assignment_dict = {
+            "assignment_id": assignment.assignment_id,
+            "lecturer_id": assignment.lecturer_id,
+            "course_name": assignment.course_name,
+            "title": assignment.title,
+            "description": assignment.description,
+            "deadline": assignment.deadline,
+            "status": status_text,
+            "feedback": feedback_text,
+            "grade": grade_score
+        }
+        result.append(assignment_dict)  # ← inside the loop
+
+    return result
+
 
 @router.post("/submit-assignment", response_model=SubmissionOut)
 def submit_assignment(
