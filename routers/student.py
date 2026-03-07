@@ -25,54 +25,48 @@ def get_current_student(current_user: User = Depends(get_current_user), db: Sess
     return student
 
 @router.get("/", response_model=List[AssignmentOut])
-def view_assignments(
-    student: Student = Depends(get_current_student),
-    db: Session = Depends(get_db)
-):
-    assignments = db.query(AssignmentDB).all()
+def view_assignments(student: Student = Depends(get_current_student), db: Session = Depends(get_db)):
+
+    # Outer join assignments with submissions, feedbacks, and grades
+    assignments_data = (
+        db.query(
+            AssignmentDB,
+            Submission.submission_id,
+            Feedback.comments.label("feedback"),
+            Grade.final_score.label("grade")
+        )
+        .outerjoin(
+            Submission,
+            (Submission.assignment_id == AssignmentDB.assignment_id) &
+            (Submission.student_id == student.matric_no)
+        )
+        .outerjoin(
+            Feedback,
+            (Feedback.assignment_id == AssignmentDB.assignment_id) &
+            (Feedback.student_id == student.matric_no)
+        )
+        .outerjoin(
+            Grade,
+            Grade.submission_id == Submission.submission_id
+        )
+        .all()
+    )
+
     result = []
-
-    for assignment in assignments:
-        submission = db.query(Submission).filter(
-            Submission.assignment_id == assignment.assignment_id,
-            Submission.student_id == student.matric_no
-        ).first()
-
-        status_text = "Pending for submission"
-        feedback_text = None
-        grade_score = None
-
-        if submission:
-            status_text = "Submitted"
-
-            feedback = db.query(Feedback).filter(
-                Feedback.assignment_id == assignment.assignment_id,
-                Feedback.student_id == student.matric_no
-            ).first()
-            if feedback:
-                feedback_text = feedback.comments
-
-            grade = db.query(Grade).filter(
-                Grade.submission_id == submission.submission_id
-            ).first()
-            if grade:
-                grade_score = grade.final_score
-
-        assignment_dict = {
+    for assignment, submission_id, feedback_text, grade_score in assignments_data:
+        result.append({
             "assignment_id": assignment.assignment_id,
             "lecturer_id": assignment.lecturer_id,
             "course_name": assignment.course_name,
             "title": assignment.title,
             "description": assignment.description,
             "deadline": assignment.deadline,
-            "status": status_text,
-            "feedback": feedback_text,
-            "grade": grade_score
-        }
-        result.append(assignment_dict)  # ← inside the loop
+            "submission_status": "Submitted" if submission_id else "No submissions have been made yet",
+            "feedback": feedback_text if feedback_text is not None else "Pending for Feedback",
+            "grade": grade_score if grade_score is not None else "Not Graded"
+        })
 
     return result
-
 
 @router.post("/submit-assignment", response_model=SubmissionOut)
 def submit_assignment(
@@ -104,10 +98,7 @@ def submit_assignment(
     db.add(submission)
     db.commit()
     db.refresh(submission)
-    return {
-        "message": f"{user.name} submitted assignment {assignment_id}",
-        "assignment": assignment
-    }
+    return submission
 
 @router.get("/my-submissions", response_model=List[SubmissionOut])
 def get_my_submissions(

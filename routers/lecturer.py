@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import Lecturer, AssignmentDB, User
-from schemas import Assignment, AssignmentOut
+from models import Lecturer, AssignmentDB, User, Submission, Feedback, Grade, Lecturer, Student, User
+from schemas import Assignment, AssignmentOut, SubmissionOut
 from typing import List
 from auth import get_current_user
 
@@ -159,6 +159,54 @@ def get_assignment(assignment_id: int, db: Session = Depends(get_db)):
         )
     
     return assignment
+
+@router.get("/view-submission", response_model=List[SubmissionOut])
+def view_submissions(
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+    submissions_data = (
+        db.query(
+            Submission,
+            AssignmentDB.title.label("title"),
+            AssignmentDB.course_name.label("course_name"),
+            User.name.label("student_name"),
+            Feedback.comments.label("feedback"),
+            Grade.final_score.label("grade")
+        )
+        .join(AssignmentDB, Submission.assignment_id == AssignmentDB.assignment_id)
+        .join(Student, Submission.student_id == Student.matric_no)
+        .join(User, Student.user_id == User.user_id)
+        .outerjoin(Feedback,
+            (Feedback.assignment_id == AssignmentDB.assignment_id) &
+            (Feedback.student_id == Submission.student_id)
+        )
+        .outerjoin(Grade, Grade.submission_id == Submission.submission_id)
+        .filter(AssignmentDB.lecturer_id == lecturer.lecturer_id)
+        .all()
+    )
+
+    if not submissions_data:
+        return []
+
+    result = []
+    for submission, title, course_name, student_name, feedback_text, grade_score in submissions_data:
+        result.append({
+            "submission_id": submission.submission_id,
+            "assignment_id": submission.assignment_id,
+            "title": title,
+            "course_name": course_name,
+            "student_id": submission.student_id,
+            "student_name": student_name,
+            "file_name": submission.file_name,
+            "file_path": submission.file_path,
+            "file_type": submission.file_type,
+            "submitted_at": submission.submitted_at,
+            "feedback": feedback_text if feedback_text is not None else "Pending for Feedback",
+            "grade": str(grade_score) if grade_score is not None else "Pending for Grading"
+        })
+
+    return result
 
 @router.get("/profile")
 def get_lecturer_profile(

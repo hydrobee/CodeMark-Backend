@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 
 class UserRole(str, Enum):
     STUDENT = "student"
@@ -47,6 +47,7 @@ class Assignment(BaseModel):
     title: str
     description: str
     deadline: datetime
+    submission_status: Optional[str] = None
 
 # For returning an assignment (response)
 class AssignmentOut(BaseModel):
@@ -56,10 +57,10 @@ class AssignmentOut(BaseModel):
     title: str
     description: str
     deadline: datetime
-    status: str
+    submission_status: Optional[str] = None
     submission_id: Optional[str] = None
     feedback: Optional[str] = None
-    grade: Optional[float] = None
+    grade: Union[float, str, None] = None
 
     class Config:
         from_attributes = True
@@ -89,13 +90,19 @@ class FeedbackCreate(BaseModel):
     assignment_id : int
     student_id : str
     comments: str
+    strengths: str | None
+    areas_for_improvement: str | None
 
 class FeedbackOut(BaseModel):
     feedback_id: int
     assignment_id: int
     lecturer_id: int
     student_id: str
+    submission_status: str
+    grade: Union[float, str, None] = None
     comments: str | None
+    strengths: str | None
+    areas_for_improvement: str | None
 
     model_config = {
         "from_attributes": True  
@@ -107,11 +114,16 @@ class SubmissionCreate(BaseModel):
 class SubmissionOut(BaseModel):
     submission_id: int
     assignment_id: int
+    title: str
+    course_name: str
     student_id: str
+    student_name: str
     file_name: str
     file_path: str
     file_type: str
     submitted_at: datetime
+    feedback: Optional[str] = None
+    grade: Optional[str] = None
 
     model_config = {
         "from_attributes": True

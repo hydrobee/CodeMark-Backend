@@ -56,6 +56,8 @@ class Feedback(Base):
     lecturer_id = Column(Integer, ForeignKey("lecturers.lecturer_id"), nullable=False)
     student_id = Column(String, ForeignKey("students.matric_no"), nullable=False)
     comments = Column(Text, nullable=True)
+    strengths = Column(Text, nullable=True)
+    areas_for_improvement = Column(Text, nullable=True)
 
 class Submission(Base):
     __tablename__ = "submission_list"

@@ -49,6 +49,14 @@ def feedback_student_view(student: Student = Depends(get_current_student), db: S
     feedbacks = db.query(Feedback).filter(Feedback.student_id == student.matric_no).all()
     return feedbacks
 
+# # Student view feedback
+# @router.get("/", response_model=List[FeedbackOut])
+# def feedback_student_view(
+#     student: Student = Depends(get_current_student),
+#     db: Session = Depends(get_db)
+# ):
+    
+
 # -----------------------------
 # Lecturer creates feedback
 # -----------------------------
