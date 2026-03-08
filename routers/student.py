@@ -100,12 +100,50 @@ def submit_assignment(
     db.refresh(submission)
     return submission
 
+# @router.get("/my-submissions", response_model=List[SubmissionOut])
+# def get_my_submissions(
+#     student: Student = Depends(get_current_student),
+#     db: Session = Depends(get_db)
+# ):
+#     return db.query(Submission).filter(Submission.student_id == student.matric_no).all()
+
 @router.get("/my-submissions", response_model=List[SubmissionOut])
 def get_my_submissions(
     student: Student = Depends(get_current_student),
     db: Session = Depends(get_db)
 ):
-    return db.query(Submission).filter(Submission.student_id == student.matric_no).all()
+
+    results = (
+        db.query(
+            Submission,
+            AssignmentDB.title,
+            AssignmentDB.course_name,
+            User.name.label("student_name")
+        )
+        .join(AssignmentDB, Submission.assignment_id == AssignmentDB.assignment_id)
+        .join(Student, Submission.student_id == Student.matric_no)
+        .join(User, Student.user_id == User.user_id)
+        .filter(Submission.student_id == student.matric_no)
+        .all()
+    )
+
+    submissions = []
+
+    for submission, title, course_name, student_name in results:
+        submissions.append({
+            "submission_id": submission.submission_id,
+            "assignment_id": submission.assignment_id,
+            "student_id": submission.student_id,
+            "student_name": student_name,
+            "title": title,
+            "course_name": course_name,
+            "file_name": submission.file_name,
+            "file_path": submission.file_path,
+            "file_type": submission.file_type,
+            "submitted_at": submission.submitted_at
+        })
+
+    return submissions
 
 @router.get("/profile")
 def get_student_profile(
@@ -118,3 +156,33 @@ def get_student_profile(
         "name": current_user.name,
         "email": current_user.email
     }
+
+@router.get("/performance")
+def student_performance(
+    student: Student = Depends(get_current_student),
+    db: Session = Depends(get_db)
+):
+    results = (
+        db.query(
+            AssignmentDB.course_name,
+            AssignmentDB.title,
+            Grade.final_score
+        )
+        .join(Submission, Submission.assignment_id == AssignmentDB.assignment_id)
+        .join(Grade, Grade.submission_id == Submission.submission_id)
+        .filter(Submission.student_id == student.matric_no)
+        .order_by(AssignmentDB.assignment_id)
+        .all()
+    )
+
+    performance = []
+
+    for course_name ,title, score in results:
+        performance.append({
+            "course_name": course_name,
+            "assignment": title,
+            "score": score
+        })
+
+        return performance 
+    

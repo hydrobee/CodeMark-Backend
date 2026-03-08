@@ -97,6 +97,23 @@ def final_score(
 
     return final_score_approval
 
+@router.get("/pending-grade-approvals")
+def get_pending_approvals(
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+    pending_grades = (
+        db.query(Grade)
+            .join(Submission, Grade.submission_id == Submission.submission_id)
+            .join(AssignmentDB, Submission.assignment_id == AssignmentDB.assignment_id)
+            .filter(AssignmentDB.lecturer_id == lecturer.lecturer_id,
+            Grade.approved == False)
+            .all()
+        )
+    
+    return pending_grades
+    
+
 # Lecturer approve grade
 @router.patch("/{grade_id}/approve")
 def approve_grade(

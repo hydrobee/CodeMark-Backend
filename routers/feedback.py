@@ -77,7 +77,9 @@ def create_feedback(
         assignment_id=data.assignment_id,
         lecturer_id=lecturer.lecturer_id,
         student_id=data.student_id,
-        comments=data.comments
+        comments=data.comments,
+        strengths = data.strengths,
+        areas_for_improvement = data.areas_for_improvement
     )
     db.add(new_feedback)
     db.commit()

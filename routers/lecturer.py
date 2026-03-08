@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import SessionLocal
 from models import Lecturer, AssignmentDB, User, Submission, Feedback, Grade, Lecturer, Student, User
 from schemas import Assignment, AssignmentOut, SubmissionOut
@@ -220,3 +221,25 @@ def get_lecturer_profile(
         "name": current_user.name,
         "email": current_user.email
     }
+
+@router.get("/performance")
+def lecturer_performance(
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+    results = (
+        db.query(
+            AssignmentDB.title,
+            func.avg(Grade.final_score).label("average_score")
+        )
+        .join(Submission, Submission.assignment_id == AssignmentDB.assignment_id)
+        .join(Grade, Grade.submission_id == Submission.submission_id)
+        .filter(AssignmentDB.lecturer_id == lecturer.lecturer_id)
+        .group_by(AssignmentDB.title)
+        .all()        
+    )
+
+    return [
+        {"title": title, "average_score": round(float(avg), 2) if avg else 0} 
+        for title, avg in results
+    ]
