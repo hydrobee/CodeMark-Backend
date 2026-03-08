@@ -98,7 +98,7 @@ class FeedbackOut(BaseModel):
     assignment_id: int
     lecturer_id: int
     student_id: str
-    submission_status: str
+    submission_status: str | None = None
     grade: Union[float, str, None] = None
     comments: str | None
     strengths: str | None
