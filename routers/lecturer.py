@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import SessionLocal
-from models import Lecturer, AssignmentDB, User, Submission, Feedback, Grade, Lecturer, Student, User
-from schemas import Assignment, AssignmentOut, SubmissionOut
+from models import Lecturer, AssignmentDB, User, Submission, Feedback, Grade, Lecturer, Student, User, Rubric
+from schemas import Assignment, AssignmentOut, SubmissionOut, FeedbackOut, FeedbackCreate, RubricCreate, RubricOut
 from typing import List
 from auth import get_current_user
 
@@ -32,12 +32,6 @@ def get_current_lecturer(current_user: User = Depends(get_current_user), db: Ses
         )
     
     return lecturer
-
-@router.get("/assignments", response_model=List[AssignmentOut])
-def get_all_assignments(db: Session = Depends(get_db)):
-    """Get all assignments"""
-    assignments = db.query(AssignmentDB).all()
-    return assignments
 
 @router.get("/my-assignments", response_model=List[AssignmentOut])
 def get_my_assignments(
@@ -81,6 +75,55 @@ def create_assignment(
     db.refresh(assignment_obj)
     
     return assignment_obj
+
+@router.post("/assignment/{assignment_id}/rubric", response_model=RubricOut, status_code=status.HTTP_201_CREATED)
+def create_or_update_rubric(
+    assignment_id: int,
+    data: RubricCreate,
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+    # Verify assignment belongs to this lecturer
+    assignment = db.query(AssignmentDB).filter(
+        AssignmentDB.assignment_id == assignment_id,
+        AssignmentDB.lecturer_id == lecturer.lecturer_id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    # Validate weights sum to 100
+    total = sum(c.weight for c in data.criteria)
+    if total != 100:
+        raise HTTPException(status_code=400, detail=f"Rubric weights must sum to 100, got {total}")
+
+    # Upsert — replace if already exists
+    existing = db.query(Rubric).filter(Rubric.assignment_id == assignment_id).first()
+    if existing:
+        existing.criteria = [c.model_dump() for c in data.criteria]
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    rubric = Rubric(
+        assignment_id=assignment_id,
+        criteria=[c.model_dump() for c in data.criteria]
+    )
+    db.add(rubric)
+    db.commit()
+    db.refresh(rubric)
+    return rubric
+
+
+@router.get("/assignment/{assignment_id}/rubric", response_model=RubricOut)
+def get_rubric(
+    assignment_id: int,
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+    rubric = db.query(Rubric).filter(Rubric.assignment_id == assignment_id).first()
+    if not rubric:
+        raise HTTPException(status_code=404, detail="No rubric set for this assignment yet")
+    return rubric
 
 @router.put("/update-assignment/{assignment_id}", response_model=AssignmentOut)
 def update_assignment(
@@ -139,7 +182,20 @@ def delete_assignment(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete your own assignments"
         )
+
+    # 1. Delete feedback first (references both assignment and submission)
+    db.query(Feedback).filter(Feedback.assignment_id == assignment_id).delete(synchronize_session=False)
     
+    # 2. Delete grades tied to submissions for this assignment
+    submission_ids = db.query(Submission.submission_id).filter(
+        Submission.assignment_id == assignment_id
+    ).subquery()
+    db.query(Grade).filter(Grade.submission_id.in_(submission_ids)).delete(synchronize_session=False)
+
+    # 3. Delete submissions
+    db.query(Submission).filter(Submission.assignment_id == assignment_id).delete(synchronize_session=False)
+
+    # 4. Now safe to delete the assignment
     db.delete(assignment)
     db.commit()
     
@@ -173,25 +229,26 @@ def view_submissions(
             AssignmentDB.course_name.label("course_name"),
             User.name.label("student_name"),
             Feedback.comments.label("feedback"),
-            Grade.final_score.label("grade")
+            Feedback.strengths.label("strengths"),
+            Feedback.areas_for_improvement.label("areas_for_improvement"),
+            Feedback.grade.label("grade"),
+            Feedback.released.label("released")
         )
         .join(AssignmentDB, Submission.assignment_id == AssignmentDB.assignment_id)
         .join(Student, Submission.student_id == Student.matric_no)
         .join(User, Student.user_id == User.user_id)
-        .outerjoin(Feedback,
-            (Feedback.assignment_id == AssignmentDB.assignment_id) &
+        .outerjoin(
+            Feedback,
+            (Feedback.assignment_id == Submission.assignment_id) &
             (Feedback.student_id == Submission.student_id)
         )
-        .outerjoin(Grade, Grade.submission_id == Submission.submission_id)
         .filter(AssignmentDB.lecturer_id == lecturer.lecturer_id)
         .all()
     )
 
-    if not submissions_data:
-        return []
-
     result = []
-    for submission, title, course_name, student_name, feedback_text, grade_score in submissions_data:
+    for submission, title, course_name, student_name, feedback_text, strengths, areas, grade_score, released in submissions_data:
+        # Only show feedback/grade if released
         result.append({
             "submission_id": submission.submission_id,
             "assignment_id": submission.assignment_id,
@@ -203,11 +260,104 @@ def view_submissions(
             "file_path": submission.file_path,
             "file_type": submission.file_type,
             "submitted_at": submission.submitted_at,
-            "feedback": feedback_text if feedback_text is not None else "Pending for Feedback",
-            "grade": str(grade_score) if grade_score is not None else "Pending for Grading"
+            "feedback": feedback_text if released else None,
+            "strengths": strengths if released else None,
+            "areas_for_improvement": areas if released else None,
+            "grade": grade_score if released else None
         })
 
     return result
+
+@router.get("/pending", response_model=List[FeedbackOut])
+def view_ai_feedback(
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+    feedbacks = db.query(Feedback).filter(
+        Feedback.lecturer_id == lecturer.lecturer_id,
+        Feedback.status == "pending"
+    ).all()
+
+    return feedbacks
+
+@router.put("/edit/{feedback_id}", response_model=FeedbackOut)
+def edit_feedback(
+    feedback_id: int,
+    data: FeedbackCreate,
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+    feedback = db.query(Feedback).filter(
+        Feedback.feedback_id == feedback_id,
+        Feedback.lecturer_id == lecturer.lecturer_id
+    ).first()
+
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+
+    feedback.comments = data.comments
+    feedback.strengths = data.strengths
+    feedback.areas_for_improvement = data.areas_for_improvement
+    feedback.grade = data.grade
+
+    db.commit()
+    db.refresh(feedback)
+
+    return feedback
+
+@router.put("/approve/{feedback_id}")
+def approve_feedback(
+    feedback_id: int,
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+    feedback = db.query(Feedback).filter(
+        Feedback.feedback_id == feedback_id,
+        Feedback.lecturer_id == lecturer.lecturer_id
+    ).first()
+
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+
+    feedback.status = "approved"
+    feedback.released = True
+
+    # Also approve the grade
+    grade = db.query(Grade).filter(
+        Grade.student_id == feedback.student_id,
+        Grade.submission_id == db.query(Submission.submission_id).filter(
+            Submission.assignment_id == feedback.assignment_id,
+            Submission.student_id == feedback.student_id
+        ).scalar_subquery()
+    ).first()
+
+    if grade:
+        grade.approved = True
+
+    db.commit()
+
+    return {"message": "Feedback and grade approved and released to student"}
+
+@router.put("/reject/{feedback_id}")
+def reject_feedback(
+    feedback_id: int,
+    lecturer: Lecturer = Depends(get_current_lecturer),
+    db: Session = Depends(get_db)
+):
+
+    feedback = db.query(Feedback).filter(
+        Feedback.feedback_id == feedback_id,
+        Feedback.lecturer_id == lecturer.lecturer_id
+    ).first()
+
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+
+    feedback.status = "rejected"
+
+    db.commit()
+
+    return {"message": "AI feedback rejected"}
 
 @router.get("/profile")
 def get_lecturer_profile(

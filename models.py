@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Enum, ForeignKey, Float, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, Enum, ForeignKey, Float, Boolean, JSON
 from sqlalchemy.orm import declarative_base, relationship
-import enum
+import enum 
 from datetime import datetime
 
 Base = declarative_base()
@@ -58,6 +58,12 @@ class Feedback(Base):
     comments = Column(Text, nullable=True)
     strengths = Column(Text, nullable=True)
     areas_for_improvement = Column(Text, nullable=True)
+    grade = Column(Float)
+    ai_generated = Column(Boolean, default=False)
+    status = Column(String(20), default="pending")
+    # pending | approved | rejected
+    released = Column(Boolean, default=False)
+
 
 class Submission(Base):
     __tablename__ = "submission_list"
@@ -84,3 +90,13 @@ class Grade(Base):
     student_id = Column(String, ForeignKey("students.matric_no"), nullable=False)
     final_score = Column(Float, nullable=True)
     approved = Column(Boolean, nullable=False, default=False)
+
+class Rubric(Base):
+    __tablename__ = "rubrics"
+
+    rubric_id = Column(Integer, primary_key=True, autoincrement=True)
+    assignment_id = Column(Integer, ForeignKey("assignment_list.assignment_id"), unique=True, nullable=False)
+    criteria = Column(JSON, nullable=False)  # [{"name": "Correctness", "weight": 40}, ...]
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    assignment = relationship("AssignmentDB")
