@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 class UserRole(str, Enum):
     STUDENT = "student"
@@ -122,8 +122,11 @@ class SubmissionOut(BaseModel):
     file_path: str
     file_type: str
     submitted_at: datetime
-    feedback: Optional[str] = None
-    grade: Optional[str] = None
+
+    grade: Optional[float] = None
+    comments: Optional[str] = None
+    strengths: Optional[str] = None
+    areas_for_improvement: Optional[str] = None
 
     model_config = {
         "from_attributes": True
@@ -144,3 +147,17 @@ class GradeOut(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+class RubricCriteria(BaseModel):
+    name: str
+    weight: int  # all weights should sum to 100
+
+class RubricCreate(BaseModel):
+    criteria: List[RubricCriteria]
+
+class RubricOut(BaseModel):
+    rubric_id: int
+    assignment_id: int
+    criteria: List[RubricCriteria]
+
+    model_config = {"from_attributes": True}
