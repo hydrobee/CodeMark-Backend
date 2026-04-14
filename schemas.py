@@ -14,7 +14,6 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     role: UserRole
-    # Additional fields based on role
     matric_no: Optional[str] = None
     group_no: Optional[str] = None
     staff_id: Optional[str] = None
@@ -32,7 +31,7 @@ class UserOut(BaseModel):
     role: UserRole
 
     class Config:
-        from_attributes = True  # Updated from orm_mode
+        from_attributes = True
 
 # Token Response
 class Token(BaseModel):
@@ -40,7 +39,7 @@ class Token(BaseModel):
     token_type: str
     user: dict
 
-# Assignment
+# Assignment (request body)
 class Assignment(BaseModel):
     lecturer_id: int
     course_name: str
@@ -49,7 +48,7 @@ class Assignment(BaseModel):
     deadline: datetime
     submission_status: Optional[str] = None
 
-# For returning an assignment (response)
+# Assignment (response) — includes question file fields
 class AssignmentOut(BaseModel):
     assignment_id: int
     lecturer_id: int
@@ -62,6 +61,16 @@ class AssignmentOut(BaseModel):
     feedback: Optional[str] = None
     grade: Union[float, str, None] = None
 
+    # Question file fields (already there)
+    question_file_name: Optional[str] = None
+    question_file_path: Optional[str] = None
+    question_file_type: Optional[str] = None
+
+    # === ADD THESE RUBRIC FIELDS ===
+    rubric_file_name: Optional[str] = None
+    rubric_file_path: Optional[str] = None
+    rubric_file_type: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -73,7 +82,7 @@ class LecturerOut(BaseModel):
     lecturer_id: int
     staff_id: str
     user_id: int
-    name: str = None  # from user relationship
+    name: str = None
 
     model_config = {"from_attributes": True}
 
@@ -81,14 +90,14 @@ class StudentOut(BaseModel):
     matric_no: str
     group_no: str
     user_id: int
-    name: str = None  # from user relationship
+    name: str = None
 
     model_config = {"from_attributes": True}
 
 # Feedback
 class FeedbackCreate(BaseModel):
-    assignment_id : int
-    student_id : str
+    assignment_id: int
+    student_id: str
     comments: str
     strengths: str | None
     areas_for_improvement: str | None
@@ -104,9 +113,7 @@ class FeedbackOut(BaseModel):
     strengths: str | None
     areas_for_improvement: str | None
 
-    model_config = {
-        "from_attributes": True  
-    }
+    model_config = {"from_attributes": True}
 
 class SubmissionCreate(BaseModel):
     assignment_id: int
@@ -117,22 +124,23 @@ class SubmissionOut(BaseModel):
     title: str
     course_name: str
     student_id: str
+    group_no: Optional[str] = None
     student_name: str
+    feedback_id: Optional[int] = None
     file_name: str
     file_path: str
     file_type: str
     submitted_at: datetime
 
     grade: Optional[float] = None
+    grade_status: Optional[str] = None
     comments: Optional[str] = None
     strengths: Optional[str] = None
     areas_for_improvement: Optional[str] = None
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}
 
-class GradeCreate(BaseModel): # field that user send in
+class GradeCreate(BaseModel):
     submission_id: int
     final_score: float
     student_id: str
@@ -144,20 +152,24 @@ class GradeOut(BaseModel):
     final_score: float
     approved: bool = False
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}
 
 class RubricCriteria(BaseModel):
     name: str
-    weight: int  # all weights should sum to 100
+    weight: int  # all weights must sum to 100
 
 class RubricCreate(BaseModel):
     criteria: List[RubricCriteria]
 
+# Rubric (response) — includes rubric file fields
 class RubricOut(BaseModel):
     rubric_id: int
     assignment_id: int
     criteria: List[RubricCriteria]
+
+    # Rubric document upload fields
+    rubric_file_name: Optional[str] = None
+    rubric_file_path: Optional[str] = None
+    rubric_file_type: Optional[str] = None
 
     model_config = {"from_attributes": True}

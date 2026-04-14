@@ -16,7 +16,7 @@ class User(Base):
     user_id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
-    password = Column(String, nullable=False)  # Will store hashed password
+    password = Column(String, nullable=False)
     role = Column(Enum(UserRole), nullable=False)
 
 class Student(Base):
@@ -48,6 +48,13 @@ class AssignmentDB(Base):
     description = Column(Text, nullable=False)
     deadline = Column(DateTime, nullable=False)
 
+    # ── Assignment question file (PDF / DOCX) ──────────────────────────────────
+    question_file_name = Column(String, nullable=True)
+    question_file_path = Column(String, nullable=True)
+    question_file_type = Column(String, nullable=True) 
+
+    rubric = relationship("Rubric", uselist=False, back_populates="assignment")
+
 class Feedback(Base):
     __tablename__ = "feedback_list"
 
@@ -59,9 +66,9 @@ class Feedback(Base):
     strengths = Column(Text, nullable=True)
     areas_for_improvement = Column(Text, nullable=True)
     grade = Column(Float)
+    rubric_scores = Column(JSON, nullable=True)   # ← NEW: [{"name":"..","score":..,"weight":..}]
     ai_generated = Column(Boolean, default=False)
     status = Column(String(20), default="pending")
-    # pending | approved | rejected
     released = Column(Boolean, default=False)
 
 
@@ -86,7 +93,7 @@ class Grade(Base):
     __tablename__ = "grade_list"
 
     grade_id = Column(Integer, primary_key=True, autoincrement=True)
-    submission_id = Column(Integer,ForeignKey("submission_list.submission_id"), nullable=False)
+    submission_id = Column(Integer, ForeignKey("submission_list.submission_id"), nullable=False)
     student_id = Column(String, ForeignKey("students.matric_no"), nullable=False)
     final_score = Column(Float, nullable=True)
     approved = Column(Boolean, nullable=False, default=False)
@@ -99,4 +106,9 @@ class Rubric(Base):
     criteria = Column(JSON, nullable=False)  # [{"name": "Correctness", "weight": 40}, ...]
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    assignment = relationship("AssignmentDB")
+    # ── Rubric document file (PDF / DOCX, may contain tables) ─────────────────
+    rubric_file_name = Column(String, nullable=True)
+    rubric_file_path = Column(String, nullable=True)
+    rubric_file_type = Column(String, nullable=True)
+
+    assignment = relationship("AssignmentDB", back_populates="rubric")

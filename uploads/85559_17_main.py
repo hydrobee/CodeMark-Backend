@@ -1,6 +1,4 @@
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from routers import lecturer, assignment, auth, student, administrator, feedback, grade
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 from models import Base
@@ -20,8 +18,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
