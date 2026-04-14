@@ -6,7 +6,7 @@ from schemas import AssignmentOut, SubmissionOut, SubmissionCreate
 from typing import List
 from auth import get_current_user
 from datetime import datetime
-from AI.ai_grader import check_code_with_ai
+from AI.ai_grader import check_code_with_ai, check_submission_with_files
 
 import shutil
 import os
@@ -30,6 +30,9 @@ def get_current_student(current_user: User = Depends(get_current_user), db: Sess
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found")
     return student
 
+# At the top, update the import:
+from AI.ai_grader import check_code_with_ai, check_submission_with_files
+
 def run_ai_grading(
     submission_id: int,
     assignment_id: int,
@@ -40,10 +43,36 @@ def run_ai_grading(
     db: Session
 ):
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            code_content = f.read()
+        # Fetch the assignment to get question file info
+        assignment = db.query(AssignmentDB).filter(
+            AssignmentDB.assignment_id == assignment_id
+        ).first()
 
-        ai_result = check_code_with_ai(code_content, criteria)
+        # Fetch the rubric to get rubric file info
+        rubric = db.query(Rubric).filter(
+            Rubric.assignment_id == assignment_id
+        ).first()
+
+        # Determine submission MIME type from file extension
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        text_exts = {'.py', '.java', '.cpp', '.js', '.c', '.txt'}
+        if ext == '.pdf':
+            submission_mime = 'application/pdf'
+        elif ext == '.docx':
+            submission_mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        else:
+            submission_mime = 'text/plain'  # .py, .java, .cpp etc.
+
+        ai_result = check_submission_with_files(
+            criteria=criteria,
+            submission_file_path=file_path,
+            submission_mime_type=submission_mime,
+            question_file_path=assignment.question_file_path if assignment else None,
+            question_mime_type=assignment.question_file_type if assignment else None,
+            rubric_file_path=rubric.rubric_file_path if rubric else None,
+            rubric_mime_type=rubric.rubric_file_type if rubric else None,
+        )
 
         grade = Grade(
             submission_id=submission_id,
@@ -61,6 +90,7 @@ def run_ai_grading(
             strengths=ai_result["strengths"],
             areas_for_improvement=ai_result["improvements"],
             grade=ai_result["score"],
+            rubric_scores=ai_result.get("rubric_scores", []),   # ← NEW
             ai_generated=True,
             status="pending",
             released=False
@@ -75,38 +105,47 @@ def run_ai_grading(
         db.close()
 
 @router.get("/", response_model=List[AssignmentOut])
-def view_assignments(student: Student = Depends(get_current_student), db: Session = Depends(get_db)):
-
+def view_assignments(
+    student: Student = Depends(get_current_student), 
+    db: Session = Depends(get_db)
+):
+    # Join Rubric so we can access rubric_file_path
     assignments_data = (
         db.query(
             AssignmentDB,
             Submission.submission_id,
             Feedback.comments.label("feedback"),
-            Grade.final_score.label("grade")
+            Grade.final_score.label("grade"),
+            Rubric.rubric_file_path,
+            Rubric.rubric_file_name,
+            Rubric.rubric_file_type
         )
         .outerjoin(
             Submission,
             (Submission.assignment_id == AssignmentDB.assignment_id) &
             (Submission.student_id == student.matric_no)
         )
-        # Only join feedback if it has been released by the lecturer
         .outerjoin(
             Feedback,
             (Feedback.assignment_id == AssignmentDB.assignment_id) &
             (Feedback.student_id == student.matric_no) &
             (Feedback.released == True)
         )
-        # Only join grade if it has been approved by the lecturer
         .outerjoin(
             Grade,
             (Grade.submission_id == Submission.submission_id) &
             (Grade.approved == True)
         )
+        .outerjoin(
+            Rubric, Rubric.assignment_id == AssignmentDB.assignment_id
+        )
         .all()
     )
 
     result = []
-    for assignment, submission_id, feedback_text, grade_score in assignments_data:
+    for (assignment, submission_id, feedback_text, grade_score, 
+         rubric_file_path, rubric_file_name, rubric_file_type) in assignments_data:
+
         result.append({
             "assignment_id": assignment.assignment_id,
             "lecturer_id": assignment.lecturer_id,
@@ -114,6 +153,17 @@ def view_assignments(student: Student = Depends(get_current_student), db: Sessio
             "title": assignment.title,
             "description": assignment.description,
             "deadline": assignment.deadline,
+
+            # Question file
+            "question_file_name": assignment.question_file_name,
+            "question_file_path": assignment.question_file_path,
+            "question_file_type": assignment.question_file_type,
+
+            # Rubric file — now included!
+            "rubric_file_name": rubric_file_name,
+            "rubric_file_path": rubric_file_path,
+            "rubric_file_type": rubric_file_type,
+
             "submission_status": "Submitted" if submission_id else "No submissions have been made yet",
             "feedback": feedback_text if feedback_text is not None else "Pending for Feedback",
             "grade": grade_score if grade_score is not None else "Not Graded"
@@ -277,6 +327,7 @@ def student_performance(
     student: Student = Depends(get_current_student),
     db: Session = Depends(get_db)
 ):
+    print(f"/performance hit for student: {student.matric_no}")
     results = (
         db.query(
             AssignmentDB.course_name,
@@ -290,6 +341,8 @@ def student_performance(
         .order_by(AssignmentDB.assignment_id)
         .all()
     )
+
+    print(f"Performance results: {results}")
 
     performance = []
     for course_name, title, score in results:
