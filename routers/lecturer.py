@@ -8,7 +8,7 @@ from models import Lecturer, AssignmentDB, User, Submission, Feedback, Grade, St
 from schemas import Assignment, AssignmentOut, SubmissionOut, FeedbackOut, FeedbackCreate, RubricCreate, RubricOut
 from typing import List
 from auth import get_current_user
-from AI.ai_grader import extract_criteria_from_rubric_file, check_submission_with_files, check_code_with_ai
+from AI.ai_grader import check_submission_with_files, check_code_with_ai
 
 router = APIRouter(prefix="/lecturer", tags=["Lecturer"])
 
@@ -266,7 +266,7 @@ def get_assignment(assignment_id: int, db: Session = Depends(get_db)):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  RUBRIC
+#  RUBRIC — manual JSON criteria only, no file extraction
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post(
@@ -324,7 +324,6 @@ def get_rubric(
     return rubric
 
 
-# ── Upload rubric document file (PDF / DOCX, may contain tables) ───────────────
 @router.post("/assignment/{assignment_id}/rubric/upload", status_code=status.HTTP_200_OK)
 def upload_rubric_file(
     assignment_id: int,
@@ -333,8 +332,9 @@ def upload_rubric_file(
     db: Session = Depends(get_db)
 ):
     """
-    Upload a PDF or DOCX rubric document (e.g. a marking scheme with tables).
-    The rubric JSON criteria must already exist before uploading the file.
+    Upload a rubric PDF or DOCX as a reference document for students.
+    This file is stored on disk only — it is NEVER passed to the AI grader.
+    Grading is driven solely by the JSON criteria saved in the database.
     """
     assignment = db.query(AssignmentDB).filter(
         AssignmentDB.assignment_id == assignment_id,
@@ -356,6 +356,7 @@ def upload_rubric_file(
             detail="Only PDF and DOCX files are allowed"
         )
 
+    # Remove old file if one exists
     if rubric.rubric_file_path and os.path.exists(rubric.rubric_file_path):
         os.remove(rubric.rubric_file_path)
 
@@ -372,7 +373,7 @@ def upload_rubric_file(
     db.commit()
 
     return {
-        "message": "Rubric file uploaded successfully",
+        "message": "Rubric reference file uploaded successfully",
         "file_name": file.filename,
         "file_type": file.content_type
     }
@@ -393,7 +394,7 @@ def view_submissions(
             AssignmentDB.title.label("title"),
             AssignmentDB.course_name.label("course_name"),
             User.name.label("student_name"),
-            Student.group_no.label("group_no"),
+            Submission.group_no.label("group_no"),
             Feedback.feedback_id.label("feedback_id"),
             Feedback.comments.label("feedback"),
             Feedback.strengths.label("strengths"),
@@ -449,8 +450,6 @@ def view_submissions(
 #  PENDING FEEDBACK (AI-generated, awaiting lecturer review)
 # ══════════════════════════════════════════════════════════════════════════════
 
-# NOTE: /pending must come BEFORE /pending/{feedback_id}
-
 @router.get("/pending")
 def view_ai_feedback(
     lecturer: Lecturer = Depends(get_current_lecturer),
@@ -462,7 +461,7 @@ def view_ai_feedback(
             AssignmentDB.title.label("title"),
             AssignmentDB.course_name.label("course_name"),
             User.name.label("student_name"),
-            Student.group_no.label("group_no"),
+            Submission.group_no.label("group_no"),
             Submission.submitted_at.label("submitted_at"),
             Submission.submission_id.label("submission_id")
         )
@@ -521,7 +520,7 @@ def get_pending_feedback_detail(
             AssignmentDB.title,
             AssignmentDB.course_name,
             User.name.label("student_name"),
-            Student.group_no
+            Submission.group_no
         )
         .join(AssignmentDB, Submission.assignment_id == AssignmentDB.assignment_id)
         .join(Student, Submission.student_id == Student.matric_no)
@@ -563,10 +562,7 @@ def generate_feedback_for_submission(
 ):
     """
     Trigger AI feedback generation for a submission that has no feedback yet.
-    Used when a student submitted but AI grading hasn't run automatically.
-    Returns the feedback_id so the frontend can navigate to the review page.
     """
-    # Verify the submission belongs to this lecturer's assignment
     submission = (
         db.query(Submission)
         .join(AssignmentDB, Submission.assignment_id == AssignmentDB.assignment_id)
@@ -579,7 +575,6 @@ def generate_feedback_for_submission(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
 
-    # If feedback already exists, return it directly — no need to regenerate
     existing = db.query(Feedback).filter(
         Feedback.assignment_id == submission.assignment_id,
         Feedback.student_id == submission.student_id
@@ -590,7 +585,6 @@ def generate_feedback_for_submission(
             "message": "Feedback already exists"
         }
 
-    # Get rubric criteria (required for grading)
     rubric = db.query(Rubric).filter(
         Rubric.assignment_id == submission.assignment_id
     ).first()
@@ -600,18 +594,15 @@ def generate_feedback_for_submission(
             detail="No rubric found for this assignment. Please set up a rubric first."
         )
 
-    # Get assignment for question file paths
     assignment = db.query(AssignmentDB).filter(
         AssignmentDB.assignment_id == submission.assignment_id
     ).first()
 
-    # Determine MIME type for the student submission file
     submission_mime = EXTENSION_MIME_MAP.get(
         submission.file_type.lower() if submission.file_type else "",
-        "text/plain"  # fallback for unknown extensions
+        "text/plain"
     )
 
-        # Run AI grading
     try:
         result = check_submission_with_files(
             criteria=rubric.criteria,
@@ -619,8 +610,8 @@ def generate_feedback_for_submission(
             submission_mime_type=submission_mime,
             question_file_path=getattr(assignment, "question_file_path", None),
             question_mime_type=getattr(assignment, "question_file_type", None),
-            rubric_file_path=getattr(rubric, "rubric_file_path", None),
-            rubric_mime_type=getattr(rubric, "rubric_file_type", None),
+            rubric_file_path=None,   # no rubric file — criteria come from DB only
+            rubric_mime_type=None,
         )
     except Exception as e:
         print(f"AI grading failed for submission {submission_id}: {e}")
@@ -629,7 +620,6 @@ def generate_feedback_for_submission(
             detail=f"AI grading failed: {str(e)}"
         )
 
-    # Save generated feedback to DB — FIXED
     feedback = Feedback(
         assignment_id=submission.assignment_id,
         student_id=submission.student_id,
@@ -637,7 +627,7 @@ def generate_feedback_for_submission(
         comments=result.get("comments"),
         strengths=result.get("strengths"),
         areas_for_improvement=result.get("improvements"),
-        grade=result.get("percentage"),           # ← Now correctly using normalized percentage
+        grade=result.get("percentage"),
         rubric_scores=result.get("rubric_scores", []),
         status="pending",
         released=False,
@@ -711,6 +701,7 @@ def approve_feedback(
     ).first()
 
     if grade:
+        grade.final_score = feedback.grade
         grade.approved = True
     else:
         grade = Grade(
@@ -769,15 +760,15 @@ def lecturer_performance(
     results = (
         db.query(
             AssignmentDB.title,
-            func.avg(Feedback.grade).label("average_score")   # Now it's already percentage
+            func.avg(Feedback.grade).label("average_score")
         )
         .join(Submission, Submission.assignment_id == AssignmentDB.assignment_id)
-        .join(Feedback, 
+        .join(Feedback,
               (Feedback.assignment_id == Submission.assignment_id) &
               (Feedback.student_id == Submission.student_id))
         .filter(
             AssignmentDB.lecturer_id == lecturer.lecturer_id,
-            Feedback.released == True,      # only released grades
+            Feedback.released == True,
             Feedback.grade.isnot(None)
         )
         .group_by(AssignmentDB.title)
@@ -786,7 +777,7 @@ def lecturer_performance(
 
     return [
         {
-            "title": title, 
+            "title": title,
             "average_score": round(float(avg), 2) if avg else 0.0
         }
         for title, avg in results
@@ -806,71 +797,3 @@ def get_feedback(
     if not feedback:
         raise HTTPException(status_code=404, detail="Feedback not found")
     return feedback
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  RUBRIC EXTRACTION
-# ══════════════════════════════════════════════════════════════════════════════
-
-@router.post("/assignment/{assignment_id}/rubric/extract", status_code=200)
-def extract_rubric_from_file(
-    assignment_id: int,
-    file: UploadFile = File(...),
-    lecturer: Lecturer = Depends(get_current_lecturer),
-    db: Session = Depends(get_db)
-):
-    assignment = db.query(AssignmentDB).filter(
-        AssignmentDB.assignment_id == assignment_id,
-        AssignmentDB.lecturer_id == lecturer.lecturer_id
-    ).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are allowed")
-
-    os.makedirs(RUBRIC_UPLOAD_DIR, exist_ok=True)
-    safe_filename = f"{assignment_id}_{file.filename}"
-    file_path = os.path.join(RUBRIC_UPLOAD_DIR, safe_filename)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    try:
-        criteria = extract_criteria_from_rubric_file(file_path, file.content_type)
-    except Exception as e:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        print(f"Rubric extraction failed: {e}")   # ← Helpful for debugging
-        raise HTTPException(status_code=422, detail=f"Could not extract criteria: {str(e)}")
-
-    # Normalize weights to 100 if needed
-    total = sum(c["weight"] for c in criteria)
-    if total != 100 and total > 0:
-        for c in criteria:
-            c["weight"] = round(c["weight"] * 100 / total)
-        current_total = sum(c["weight"] for c in criteria)
-        if current_total != 100:
-            criteria[-1]["weight"] += 100 - current_total
-
-    # Save to DB
-    rubric = db.query(Rubric).filter(Rubric.assignment_id == assignment_id).first()
-    if rubric:
-        rubric.criteria = criteria
-        rubric.rubric_file_name = file.filename
-        rubric.rubric_file_path = file_path
-        rubric.rubric_file_type = file.content_type
-    else:
-        rubric = Rubric(
-            assignment_id=assignment_id,
-            criteria=criteria,
-            rubric_file_name=file.filename,
-            rubric_file_path=file_path,
-            rubric_file_type=file.content_type,
-        )
-        db.add(rubric)
-
-    db.commit()
-    db.refresh(rubric)
-
-    return {"criteria": criteria, "file_name": file.filename}

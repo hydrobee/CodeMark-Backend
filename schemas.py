@@ -15,7 +15,7 @@ class UserRegister(BaseModel):
     password: str
     role: UserRole
     matric_no: Optional[str] = None
-    group_no: Optional[str] = None
+   # group_no: Optional[str] = None
     staff_id: Optional[str] = None
 
 # User Login
@@ -88,7 +88,7 @@ class LecturerOut(BaseModel):
 
 class StudentOut(BaseModel):
     matric_no: str
-    group_no: str
+   # group_no: str
     user_id: int
     name: str = None
 
@@ -117,6 +117,7 @@ class FeedbackOut(BaseModel):
 
 class SubmissionCreate(BaseModel):
     assignment_id: int
+    group_no: Optional[str] = None
 
 class SubmissionOut(BaseModel):
     submission_id: int
