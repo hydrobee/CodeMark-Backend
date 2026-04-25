@@ -19,14 +19,17 @@ class User(Base):
     password = Column(String, nullable=False)
     role = Column(Enum(UserRole), nullable=False)
 
+    student = relationship("Student", back_populates="user", uselist=False)
+    lecturer = relationship("Lecturer", back_populates="user", uselist=False)
+
 class Student(Base):
     __tablename__ = "students"
     
     matric_no = Column(String, primary_key=True)
-    group_no = Column(String, nullable=False)
+    # group_no = Column(String, nullable=False)
     user_id = Column(Integer, ForeignKey('users.user_id'), nullable=False)
 
-    user = relationship("User")
+    user = relationship("User", back_populates="student")
 
 class Lecturer(Base):
     __tablename__ = "lecturers"
@@ -36,7 +39,7 @@ class Lecturer(Base):
     user_id = Column(Integer, ForeignKey('users.user_id'), nullable=False)
     status = Column(String, default="pending")
 
-    user = relationship("User")
+    user = relationship("User", back_populates="lecturer")
 
 class AssignmentDB(Base):
     __tablename__ = "assignment_list"
@@ -78,6 +81,7 @@ class Submission(Base):
     submission_id = Column(Integer, primary_key=True, autoincrement=True)
     assignment_id = Column(Integer, ForeignKey("assignment_list.assignment_id"), nullable=False)
     student_id = Column(String, ForeignKey("students.matric_no"), nullable=False)
+    group_no = Column(String, nullable=True)
 
     # Submission File Info
     file_name = Column(String, nullable=False)

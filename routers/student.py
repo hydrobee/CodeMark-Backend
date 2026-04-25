@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from database import SessionLocal
 from models import Student, AssignmentDB, User, Submission, Feedback, Grade, Rubric
 from schemas import AssignmentOut, SubmissionOut, SubmissionCreate
-from typing import List
+from typing import List, Optional
 from auth import get_current_user
 from datetime import datetime
 from AI.ai_grader import check_code_with_ai, check_submission_with_files
@@ -77,7 +77,7 @@ def run_ai_grading(
         grade = Grade(
             submission_id=submission_id,
             student_id=student_id,
-            final_score=ai_result["score"],
+            final_score=ai_result["percentage"],
             approved=False
         )
         db.add(grade)
@@ -176,6 +176,7 @@ def submit_assignment(
     assignment_id: int,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    group_no: Optional[str] = None,          
     student: Student = Depends(get_current_student),
     db: Session = Depends(get_db)
 ):
@@ -198,7 +199,7 @@ def submit_assignment(
     if file_ext not in allowed_extensions:
         raise HTTPException(status_code=400, detail="Invalid file type")
 
-    # 4. Check rubric exists before accepting submission
+    # 4. Check rubric exists
     rubric = db.query(Rubric).filter(Rubric.assignment_id == assignment_id).first()
     if not rubric:
         raise HTTPException(status_code=400, detail="Lecturer has not set a rubric for this assignment yet")
@@ -210,10 +211,11 @@ def submit_assignment(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # 6. Save submission immediately
+    # 6. Save submission with group_no
     submission = Submission(
         assignment_id=assignment.assignment_id,
         student_id=student.matric_no,
+        group_no=group_no,                   # ← ADD THIS
         file_name=file.filename,
         file_path=file_path,
         file_type=file_ext,
@@ -226,7 +228,7 @@ def submit_assignment(
     # 7. Fetch user for response
     user = db.query(User).filter(User.user_id == student.user_id).first()
 
-    # 8. Kick off AI grading in background (new db session so it doesn't conflict)
+    # 8. AI grading background task
     background_db = SessionLocal()
     background_tasks.add_task(
         run_ai_grading,
@@ -235,7 +237,7 @@ def submit_assignment(
         lecturer_id=assignment.lecturer_id,
         student_id=student.matric_no,
         file_path=file_path,
-        criteria=rubric.criteria,  # ← pass rubric criteria to AI grader
+        criteria=rubric.criteria,
         db=background_db
     )
 
@@ -247,6 +249,7 @@ def submit_assignment(
         student_name=user.name,
         course_name=assignment.course_name,
         title=assignment.title,
+        group_no=group_no,                   # ← ADD THIS
         file_name=submission.file_name,
         file_path=submission.file_path,
         file_type=submission.file_type,
@@ -316,7 +319,7 @@ def get_student_profile(
 ):
     return {
         "matric_no": student.matric_no,
-        "group_no": student.group_no,
+        # "group_no": student.group_no,
         "name": current_user.name,
         "email": current_user.email
     }

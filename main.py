@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 from models import Base
 from routers import lecturer, assignment, auth, student, administrator, feedback, grade
+from system_log import SystemLog
+
 
 app = FastAPI(
     title="CodeMark Backend",
@@ -17,7 +19,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"],  # Update this with your frontend URL in production
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
