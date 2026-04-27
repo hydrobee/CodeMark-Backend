@@ -101,6 +101,7 @@ class FeedbackCreate(BaseModel):
     comments: str
     strengths: str | None
     areas_for_improvement: str | None
+    grade: Optional[float] = None
 
 class FeedbackOut(BaseModel):
     feedback_id: int
