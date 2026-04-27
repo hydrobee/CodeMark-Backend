@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import SessionLocal
 from models import Lecturer, AssignmentDB, User, Submission, Feedback, Grade, Student, Rubric
-from schemas import Assignment, AssignmentOut, SubmissionOut, FeedbackOut, FeedbackCreate, RubricCreate, RubricOut
+from schemas import Assignment, AssignmentOut, SubmissionOut, FeedbackOut, FeedbackCreate, RubricCreate, RubricOut, FeedbackUpdate
 from typing import List
 from auth import get_current_user
 from AI.ai_grader import check_submission_with_files, check_code_with_ai
@@ -649,25 +649,48 @@ def generate_feedback_for_submission(
 @router.put("/edit/{feedback_id}", response_model=FeedbackOut)
 def edit_feedback(
     feedback_id: int,
-    data: FeedbackCreate,
+    data: FeedbackUpdate,                    # ← Changed from FeedbackCreate
     lecturer: Lecturer = Depends(get_current_lecturer),
     db: Session = Depends(get_db)
 ):
-    feedback = db.query(Feedback).filter(
-        Feedback.feedback_id == feedback_id,
-        Feedback.lecturer_id == lecturer.lecturer_id
-    ).first()
+    try:
+        feedback = db.query(Feedback).filter(
+            Feedback.feedback_id == feedback_id,
+            Feedback.lecturer_id == lecturer.lecturer_id
+        ).first()
 
-    if not feedback:
-        raise HTTPException(status_code=404, detail="Feedback not found")
+        if not feedback:
+            raise HTTPException(status_code=404, detail="Feedback not found")
 
-    feedback.comments = data.comments
-    feedback.strengths = data.strengths
-    feedback.areas_for_improvement = data.areas_for_improvement
-    feedback.grade = data.grade
-    db.commit()
-    db.refresh(feedback)
-    return feedback
+        # Only update fields that are explicitly provided (None = skip)
+        if data.comments is not None:
+            feedback.comments = data.comments
+
+        if data.strengths is not None:
+            feedback.strengths = data.strengths
+
+        if data.areas_for_improvement is not None:
+            feedback.areas_for_improvement = data.areas_for_improvement
+
+        if data.grade is not None:
+            feedback.grade = float(data.grade) if data.grade is not None else None
+            # Optional: auto-approve when grade is set
+            # feedback.status = "approved"
+
+        db.commit()
+        db.refresh(feedback)
+
+        return feedback
+
+    except Exception as e:
+        db.rollback()
+        import traceback
+        print("=== EDIT FEEDBACK ERROR ===")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update feedback: {str(e)}"
+        )
 
 
 @router.put("/approve/{feedback_id}")

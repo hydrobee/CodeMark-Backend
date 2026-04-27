@@ -99,6 +99,16 @@ class FeedbackCreate(BaseModel):
     assignment_id: Optional[int] = None
     student_id: Optional[str] = None
 
+# Feedback Update - Used when lecturer edits AI-generated feedback
+class FeedbackUpdate(BaseModel):
+    comments: Optional[str] = None
+    strengths: Optional[str] = None
+    areas_for_improvement: Optional[str] = None
+    grade: Optional[Union[int, float, None]] = None
+
+    class Config:
+        from_attributes = True   # or model_config = {"from_attributes": True} in v2
+
 class FeedbackOut(BaseModel):
     feedback_id: int
     assignment_id: int
@@ -109,6 +119,8 @@ class FeedbackOut(BaseModel):
     comments: str | None
     strengths: str | None
     areas_for_improvement: str | None
+    status: Optional[str] = None
+    released: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
