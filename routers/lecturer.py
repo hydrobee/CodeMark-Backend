@@ -649,7 +649,7 @@ def generate_feedback_for_submission(
 @router.put("/edit/{feedback_id}", response_model=FeedbackOut)
 def edit_feedback(
     feedback_id: int,
-    data: FeedbackUpdate,                    # ← Changed from FeedbackCreate
+    data: FeedbackUpdate,
     lecturer: Lecturer = Depends(get_current_lecturer),
     db: Session = Depends(get_db)
 ):
@@ -662,7 +662,7 @@ def edit_feedback(
         if not feedback:
             raise HTTPException(status_code=404, detail="Feedback not found")
 
-        # Only update fields that are explicitly provided (None = skip)
+        # ✅ Only update if provided
         if data.comments is not None:
             feedback.comments = data.comments
 
@@ -673,23 +673,26 @@ def edit_feedback(
             feedback.areas_for_improvement = data.areas_for_improvement
 
         if data.grade is not None:
-            feedback.grade = float(data.grade) if data.grade is not None else None
-            # Optional: auto-approve when grade is set
-            # feedback.status = "approved"
+            if data.grade < 0 or data.grade > 100:
+                raise HTTPException(status_code=400, detail="Grade must be 0–100")
+            feedback.grade = float(data.grade)
 
         db.commit()
         db.refresh(feedback)
 
         return feedback
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         import traceback
         print("=== EDIT FEEDBACK ERROR ===")
         print(traceback.format_exc())
+
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to update feedback: {str(e)}"
+            detail=str(e)   # 🔥 IMPORTANT: return real error
         )
 
 

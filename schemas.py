@@ -104,7 +104,7 @@ class FeedbackUpdate(BaseModel):
     comments: Optional[str] = None
     strengths: Optional[str] = None
     areas_for_improvement: Optional[str] = None
-    grade: Optional[Union[int, float, None]] = None
+    grade: Optional[float] = None
 
     class Config:
         from_attributes = True   # or model_config = {"from_attributes": True} in v2
