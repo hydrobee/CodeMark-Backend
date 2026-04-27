@@ -96,12 +96,8 @@ class StudentOut(BaseModel):
 
 # Feedback
 class FeedbackCreate(BaseModel):
-    assignment_id: int
-    student_id: str
-    comments: str
-    strengths: str | None
-    areas_for_improvement: str | None
-    grade: Optional[float] = None
+    assignment_id: Optional[int] = None
+    student_id: Optional[str] = None
 
 class FeedbackOut(BaseModel):
     feedback_id: int
