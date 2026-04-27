@@ -17,7 +17,7 @@ app = FastAPI(
 # Add CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],  # Update this with your frontend URL in production
+    allow_origins=["http://localhost:4200", "https://code-mark-frontend-vcwp.vercel.app"],  # Update this with your frontend URL in production
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
