@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from database import SessionLocal
-from models import Student, AssignmentDB, User, Submission, Feedback, Grade, Rubric
+from models import Student, AssignmentDB, User, Submission, Feedback, Grade, Rubric, Lecturer
 from schemas import AssignmentOut, SubmissionOut, SubmissionCreate
 from typing import List, Optional
 from auth import get_current_user
@@ -106,10 +106,9 @@ def run_ai_grading(
 
 @router.get("/", response_model=List[AssignmentOut])
 def view_assignments(
-    student: Student = Depends(get_current_student), 
+    student: Student = Depends(get_current_student),
     db: Session = Depends(get_db)
 ):
-    # Join Rubric so we can access rubric_file_path
     assignments_data = (
         db.query(
             AssignmentDB,
@@ -118,7 +117,9 @@ def view_assignments(
             Grade.final_score.label("grade"),
             Rubric.rubric_file_path,
             Rubric.rubric_file_name,
-            Rubric.rubric_file_type
+            Rubric.rubric_file_type,
+            User.name.label("lecturer_name"),       # ← ADD
+            User.email.label("lecturer_email"),     # ← ADD
         )
         .outerjoin(
             Submission,
@@ -139,12 +140,16 @@ def view_assignments(
         .outerjoin(
             Rubric, Rubric.assignment_id == AssignmentDB.assignment_id
         )
+        # ── JOIN Lecturer + User to get lecturer name/email ──
+        .join(Lecturer, Lecturer.lecturer_id == AssignmentDB.lecturer_id)
+        .join(User, User.user_id == Lecturer.user_id)
         .all()
     )
 
     result = []
-    for (assignment, submission_id, feedback_text, grade_score, 
-         rubric_file_path, rubric_file_name, rubric_file_type) in assignments_data:
+    for (assignment, submission_id, feedback_text, grade_score,
+         rubric_file_path, rubric_file_name, rubric_file_type,
+         lecturer_name, lecturer_email) in assignments_data:      # ← ADD
 
         result.append({
             "assignment_id": assignment.assignment_id,
@@ -154,19 +159,21 @@ def view_assignments(
             "description": assignment.description,
             "deadline": assignment.deadline,
 
-            # Question file
             "question_file_name": assignment.question_file_name,
             "question_file_path": assignment.question_file_path,
             "question_file_type": assignment.question_file_type,
 
-            # Rubric file — now included!
             "rubric_file_name": rubric_file_name,
             "rubric_file_path": rubric_file_path,
             "rubric_file_type": rubric_file_type,
 
             "submission_status": "Submitted" if submission_id else "No submissions have been made yet",
             "feedback": feedback_text if feedback_text is not None else "Pending for Feedback",
-            "grade": grade_score if grade_score is not None else "Not Graded"
+            "grade": grade_score if grade_score is not None else "Not Graded",
+
+            # ── ADD THESE ──
+            "lecturer_name": lecturer_name,
+            "lecturer_email": lecturer_email,
         })
 
     return result

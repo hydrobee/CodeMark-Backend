@@ -71,6 +71,9 @@ class AssignmentOut(BaseModel):
     rubric_file_path: Optional[str] = None
     rubric_file_type: Optional[str] = None
 
+    lecturer_name: Optional[str] = None
+    lecturer_email: Optional[str] = None
+
     class Config:
         from_attributes = True
 
