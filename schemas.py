@@ -116,11 +116,12 @@ class FeedbackOut(BaseModel):
     student_id: str
     submission_status: str | None = None
     grade: Union[float, str, None] = None
-    comments: str | None
-    strengths: str | None
-    areas_for_improvement: str | None
+    comments: str | None = None
+    strengths: str | None = None
+    areas_for_improvement: str | None = None
+    rubric_scores: Optional[list] = None  # ← add this
     status: Optional[str] = None
-    released: Optional[str] = None
+    released: Optional[bool] = None      # ← fix this
 
     model_config = {"from_attributes": True}
 
