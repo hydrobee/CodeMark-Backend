@@ -499,6 +499,56 @@ def view_ai_feedback(
     return result
 
 
+# @router.get("/pending/{feedback_id}")
+# def get_pending_feedback_detail(
+#     feedback_id: int,
+#     lecturer: Lecturer = Depends(get_current_lecturer),
+#     db: Session = Depends(get_db)
+# ):
+#     feedback = db.query(Feedback).filter(
+#         Feedback.feedback_id == feedback_id,
+#         Feedback.lecturer_id == lecturer.lecturer_id,
+#         Feedback.status == "pending"
+#     ).first()
+
+#     if not feedback:
+#         raise HTTPException(status_code=404, detail="Pending feedback not found")
+
+#     submission = (
+#         db.query(
+#             Submission,
+#             AssignmentDB.title,
+#             AssignmentDB.course_name,
+#             User.name.label("student_name"),
+#             Submission.group_no
+#         )
+#         .join(AssignmentDB, Submission.assignment_id == AssignmentDB.assignment_id)
+#         .join(Student, Submission.student_id == Student.matric_no)
+#         .join(User, Student.user_id == User.user_id)
+#         .filter(
+#             Submission.assignment_id == feedback.assignment_id,
+#             Submission.student_id == feedback.student_id
+#         )
+#         .first()
+#     )
+
+#     if not submission:
+#         raise HTTPException(status_code=404, detail="Submission not found")
+
+#     sub, title, course_name, student_name, group_no = submission
+
+#     return {
+#         **feedback.__dict__,
+#         "submission_id": sub.submission_id,
+#         "file_name": sub.file_name,
+#         "file_path": sub.file_path,
+#         "submitted_at": sub.submitted_at,
+#         "student_name": student_name,
+#         "group_no": group_no,
+#         "course_name": course_name,
+#         "title": title,
+#     }
+
 @router.get("/pending/{feedback_id}")
 def get_pending_feedback_detail(
     feedback_id: int,
@@ -520,6 +570,7 @@ def get_pending_feedback_detail(
             AssignmentDB.title,
             AssignmentDB.course_name,
             User.name.label("student_name"),
+            User.email.label("student_email"),  # ← ADD THIS
             Submission.group_no
         )
         .join(AssignmentDB, Submission.assignment_id == AssignmentDB.assignment_id)
@@ -535,7 +586,7 @@ def get_pending_feedback_detail(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
 
-    sub, title, course_name, student_name, group_no = submission
+    sub, title, course_name, student_name, student_email, group_no = submission  # ← ADD student_email
 
     return {
         **feedback.__dict__,
@@ -544,6 +595,7 @@ def get_pending_feedback_detail(
         "file_path": sub.file_path,
         "submitted_at": sub.submitted_at,
         "student_name": student_name,
+        "student_email": student_email,  # ← ADD THIS
         "group_no": group_no,
         "course_name": course_name,
         "title": title,
