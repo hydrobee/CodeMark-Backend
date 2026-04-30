@@ -37,7 +37,7 @@ class Lecturer(Base):
     lecturer_id = Column(Integer, primary_key=True, autoincrement=True)
     staff_id = Column(String, unique=True, nullable=False)
     user_id = Column(Integer, ForeignKey('users.user_id'), nullable=False)
-    status = Column(String, default="pending")
+    status = Column(String, default="approved")
 
     user = relationship("User", back_populates="lecturer")
 
