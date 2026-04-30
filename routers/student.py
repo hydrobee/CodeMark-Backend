@@ -201,7 +201,7 @@ def submit_assignment(
         raise HTTPException(status_code=400, detail="Already submitted")
 
     # 3. Validate file extension
-    allowed_extensions = [".py", ".java", ".cpp", ".js", ".c", ".c++"]
+    allowed_extensions = [".py", ".java", ".cpp", ".c++", ".js", ".c"]
     file_ext = os.path.splitext(file.filename)[1]
     if file_ext not in allowed_extensions:
         raise HTTPException(status_code=400, detail="Invalid file type")
