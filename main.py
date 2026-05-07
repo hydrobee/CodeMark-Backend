@@ -13,7 +13,7 @@ RENDER_URL = "https://codemark-ai-assisted-student-programming.onrender.com"
 
 async def keep_alive():
     while True:
-        await asyncio.sleep(300)  # every 5 minutes
+        await asyncio.sleep(900)  
         try:
             async with httpx.AsyncClient() as client:
                 await client.get(f"{RENDER_URL}/health")
