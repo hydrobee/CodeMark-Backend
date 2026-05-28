@@ -62,6 +62,9 @@ def run_ai_grading(
 
         question_path = download_to_tmp(assignment.question_file_path if assignment else None)
         rubric_path = download_to_tmp(rubric.rubric_file_path if rubric else None)
+        local_submission_path = download_to_tmp(file_path)
+        print(f"[DEBUG] local_submission_path: {local_submission_path}")
+        print(f"[DEBUG] exists: {os.path.exists(local_submission_path)}")
 
         ai_result = check_submission_with_files(
             criteria=criteria,
