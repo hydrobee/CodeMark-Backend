@@ -1,5 +1,6 @@
 import os
 import httpx
+from urllib.parse import unquote
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
@@ -36,19 +37,19 @@ def upload_to_supabase(file_bytes: bytes, filename: str, bucket: str) -> str:
 
 
 def download_to_tmp(url: str | None) -> str | None:
-    """
-    If the path is a Supabase URL, download it to /tmp and return the local path.
-    If it's already a local path (or None), return as-is.
-    """
     if not url or not url.startswith("http"):
         return url
 
-    filename = url.split("/")[-1]
+    filename = unquote(url.split("/")[-1])  # decode %20 etc.
     local_path = f"/tmp/{filename}"
 
-    response = httpx.get(url)
-    response.raise_for_status()
-    with open(local_path, "wb") as f:
-        f.write(response.content)
-
-    return local_path
+    try:
+        response = httpx.get(url, timeout=30.0)
+        response.raise_for_status()
+        with open(local_path, "wb") as f:
+            f.write(response.content)
+        print(f"[DEBUG] Downloaded → {local_path} ({len(response.content)} bytes)")
+        return local_path
+    except Exception as e:
+        print(f"[ERROR] download_to_tmp failed for {url}: {e}")
+        raise
