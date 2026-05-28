@@ -181,7 +181,7 @@ def upload_assignment_question(
 
     file_bytes = file.file.read()
     safe_filename = f"{assignment_id}_{file.filename}"
-    public_url = upload_to_supabase(file_bytes, safe_filename, "assignment-questions")
+    public_url = upload_to_supabase(file_bytes, safe_filename, "assignment-question")
 
     assignment.question_file_name = file.filename
     assignment.question_file_path = public_url
@@ -311,7 +311,7 @@ def delete_assignment(
             filename = assignment.question_file_path.split("/")[-1]
             try:
                 httpx.delete(
-                    f"{SUPABASE_URL}/storage/v1/object/assignment-questions/{filename}",
+                    f"{SUPABASE_URL}/storage/v1/object/assignment-question/{filename}",
                     headers={
                         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
                         "apikey": SUPABASE_SERVICE_KEY,
