@@ -222,6 +222,9 @@ def submit_assignment(
         shutil.copyfileobj(file.file, buffer)
 
     # 6. Save submission with group_no
+    from datetime import timezone, timedelta
+    MY_TZ = timezone(timedelta(hours=8))
+
     submission = Submission(
         assignment_id=assignment.assignment_id,
         student_id=student.matric_no,
@@ -229,7 +232,7 @@ def submit_assignment(
         file_name=file.filename,
         file_path=file_path,
         file_type=file_ext,
-        submitted_at=datetime.utcnow()
+        submitted_at=datetime.now(MY_TZ).replace(tzinfo=None)
     )
     db.add(submission)
     db.commit()
