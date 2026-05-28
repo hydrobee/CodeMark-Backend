@@ -7,7 +7,12 @@ from schemas import Assignment, AssignmentOut, SubmissionOut, FeedbackOut, Feedb
 from typing import List
 from auth import get_current_user
 from AI.ai_grader import check_submission_with_files, check_code_with_ai
-from supabase_storage import upload_to_supabase, download_to_tmp, supabase
+from supabase_storage import upload_to_supabase, download_to_tmp
+import httpx
+import os
+
+SUPABASE_URL = os.getenv("https://mqkpfopmillgvnwrlmza.supabase.co")
+SUPABASE_SERVICE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1xa3Bmb3BtaWxsZ3Zud3JsbXphIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzI4NjQ2MCwiZXhwIjoyMDkyODYyNDYwfQ.zAU5NGKccdhPAefflGzYOtXHti77ZpI3yEmUmvdWE2s")
 
 router = APIRouter(prefix="/lecturer", tags=["Lecturer"])
 
@@ -305,7 +310,13 @@ def delete_assignment(
         if assignment.question_file_path and assignment.question_file_path.startswith("http"):
             filename = assignment.question_file_path.split("/")[-1]
             try:
-                supabase.storage.from_("assignment-questions").remove([filename])
+                httpx.delete(
+                    f"{SUPABASE_URL}/storage/v1/object/assignment-questions/{filename}",
+                    headers={
+                        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                        "apikey": SUPABASE_SERVICE_KEY,
+                    }
+                )
             except Exception as e:
                 print(f"Warning: could not delete question file from storage: {e}")
 
@@ -339,7 +350,13 @@ def delete_assignment(
             if rubric.rubric_file_path and rubric.rubric_file_path.startswith("http"):
                 filename = rubric.rubric_file_path.split("/")[-1]
                 try:
-                    supabase.storage.from_("rubrics").remove([filename])
+                    httpx.delete(
+                        f"{SUPABASE_URL}/storage/v1/object/rubrics/{filename}",
+                        headers={
+                            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                            "apikey": SUPABASE_SERVICE_KEY,
+                        }
+                    )
                 except Exception as e:
                     print(f"Warning: could not delete rubric file from storage: {e}")
             db.delete(rubric)
