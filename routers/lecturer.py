@@ -1,5 +1,3 @@
-import os
-import shutil
 from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -9,12 +7,13 @@ from schemas import Assignment, AssignmentOut, SubmissionOut, FeedbackOut, Feedb
 from typing import List
 from auth import get_current_user
 from AI.ai_grader import check_submission_with_files, check_code_with_ai
+from supabase_storage import upload_to_supabase, download_to_tmp, supabase
 
 router = APIRouter(prefix="/lecturer", tags=["Lecturer"])
 
 # ── Upload directories ─────────────────────────────────────────────────────────
-QUESTION_UPLOAD_DIR = "uploads/assignment_questions"
-RUBRIC_UPLOAD_DIR   = "uploads/rubrics"
+# QUESTION_UPLOAD_DIR = "uploads/assignment_questions"
+# RUBRIC_UPLOAD_DIR   = "uploads/rubrics"
 
 # ── Allowed MIME types ─────────────────────────────────────────────────────────
 ALLOWED_TYPES = {
@@ -112,6 +111,52 @@ def create_assignment(
 
 
 # ── Upload assignment question file (PDF / DOCX) ───────────────────────────────
+# @router.post("/assignment/{assignment_id}/upload-question", status_code=status.HTTP_200_OK)
+# def upload_assignment_question(
+#     assignment_id: int,
+#     file: UploadFile = File(...),
+#     lecturer: Lecturer = Depends(get_current_lecturer),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     Upload a PDF or DOCX file that contains the assignment question/brief.
+#     The AI grading service will use this file to understand the assignment
+#     objectives when evaluating student submissions.
+#     """
+#     assignment = db.query(AssignmentDB).filter(
+#         AssignmentDB.assignment_id == assignment_id,
+#         AssignmentDB.lecturer_id == lecturer.lecturer_id
+#     ).first()
+#     if not assignment:
+#         raise HTTPException(status_code=404, detail="Assignment not found")
+
+#     if file.content_type not in ALLOWED_TYPES:
+#         raise HTTPException(
+#             status_code=400,
+#             detail="Only PDF and DOCX files are allowed"
+#         )
+
+#     if assignment.question_file_path and os.path.exists(assignment.question_file_path):
+#         os.remove(assignment.question_file_path)
+
+#     os.makedirs(QUESTION_UPLOAD_DIR, exist_ok=True)
+#     safe_filename = f"{assignment_id}_{file.filename}"
+#     file_path = os.path.join(QUESTION_UPLOAD_DIR, safe_filename)
+
+#     with open(file_path, "wb") as buffer:
+#         shutil.copyfileobj(file.file, buffer)
+
+#     assignment.question_file_name = file.filename
+#     assignment.question_file_path = file_path
+#     assignment.question_file_type = file.content_type
+#     db.commit()
+
+#     return {
+#         "message": "Assignment question file uploaded successfully",
+#         "file_name": file.filename,
+#         "file_type": file.content_type
+#     }
+
 @router.post("/assignment/{assignment_id}/upload-question", status_code=status.HTTP_200_OK)
 def upload_assignment_question(
     assignment_id: int,
@@ -119,11 +164,6 @@ def upload_assignment_question(
     lecturer: Lecturer = Depends(get_current_lecturer),
     db: Session = Depends(get_db)
 ):
-    """
-    Upload a PDF or DOCX file that contains the assignment question/brief.
-    The AI grading service will use this file to understand the assignment
-    objectives when evaluating student submissions.
-    """
     assignment = db.query(AssignmentDB).filter(
         AssignmentDB.assignment_id == assignment_id,
         AssignmentDB.lecturer_id == lecturer.lecturer_id
@@ -132,30 +172,22 @@ def upload_assignment_question(
         raise HTTPException(status_code=404, detail="Assignment not found")
 
     if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF and DOCX files are allowed"
-        )
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are allowed")
 
-    if assignment.question_file_path and os.path.exists(assignment.question_file_path):
-        os.remove(assignment.question_file_path)
-
-    os.makedirs(QUESTION_UPLOAD_DIR, exist_ok=True)
+    file_bytes = file.file.read()
     safe_filename = f"{assignment_id}_{file.filename}"
-    file_path = os.path.join(QUESTION_UPLOAD_DIR, safe_filename)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    public_url = upload_to_supabase(file_bytes, safe_filename, "assignment-questions")
 
     assignment.question_file_name = file.filename
-    assignment.question_file_path = file_path
+    assignment.question_file_path = public_url
     assignment.question_file_type = file.content_type
     db.commit()
 
     return {
         "message": "Assignment question file uploaded successfully",
         "file_name": file.filename,
-        "file_type": file.content_type
+        "file_type": file.content_type,
+        "url": public_url
     }
 
 
@@ -185,6 +217,72 @@ def update_assignment(
     return assignment
 
 
+# @router.delete("/delete-assignment/{assignment_id}")
+# def delete_assignment(
+#     assignment_id: int,
+#     lecturer: Lecturer = Depends(get_current_lecturer),
+#     db: Session = Depends(get_db)
+# ):
+#     """Delete an assignment (only by the creator)."""
+#     try:
+#         assignment = db.query(AssignmentDB).filter(
+#             AssignmentDB.assignment_id == assignment_id
+#         ).first()
+
+#         if not assignment:
+#             raise HTTPException(status_code=404, detail="Assignment not found")
+
+#         if assignment.lecturer_id != lecturer.lecturer_id:
+#             raise HTTPException(status_code=403, detail="You can only delete your own assignments")
+
+#         if assignment.question_file_path and os.path.exists(assignment.question_file_path):
+#             os.remove(assignment.question_file_path)
+
+#         # 1. Delete feedback first
+#         db.query(Feedback).filter(
+#             Feedback.assignment_id == assignment_id
+#         ).delete(synchronize_session=False)
+
+#         # 2. Delete grades tied to submissions of this assignment
+#         submission_ids = [
+#             row.submission_id
+#             for row in db.query(Submission.submission_id).filter(
+#                 Submission.assignment_id == assignment_id
+#             ).all()
+#         ]
+#         if submission_ids:
+#             db.query(Grade).filter(
+#                 Grade.submission_id.in_(submission_ids)
+#             ).delete(synchronize_session=False)
+
+#         # 3. Delete submissions
+#         db.query(Submission).filter(
+#             Submission.assignment_id == assignment_id
+#         ).delete(synchronize_session=False)
+
+#         # 4. Delete rubric file from disk + rubric record
+#         rubric = db.query(Rubric).filter(
+#             Rubric.assignment_id == assignment_id
+#         ).first()
+#         if rubric:
+#             if rubric.rubric_file_path and os.path.exists(rubric.rubric_file_path):
+#                 os.remove(rubric.rubric_file_path)
+#             db.delete(rubric)
+#             db.flush()
+
+#         # 5. Finally delete the assignment
+#         db.delete(assignment)
+#         db.commit()
+
+#         return {"message": "Assignment deleted successfully"}
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         db.rollback()
+#         print(f"DELETE /delete-assignment/{assignment_id} failed: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
+
 @router.delete("/delete-assignment/{assignment_id}")
 def delete_assignment(
     assignment_id: int,
@@ -203,8 +301,13 @@ def delete_assignment(
         if assignment.lecturer_id != lecturer.lecturer_id:
             raise HTTPException(status_code=403, detail="You can only delete your own assignments")
 
-        if assignment.question_file_path and os.path.exists(assignment.question_file_path):
-            os.remove(assignment.question_file_path)
+        # Delete question file from Supabase Storage
+        if assignment.question_file_path and assignment.question_file_path.startswith("http"):
+            filename = assignment.question_file_path.split("/")[-1]
+            try:
+                supabase.storage.from_("assignment-questions").remove([filename])
+            except Exception as e:
+                print(f"Warning: could not delete question file from storage: {e}")
 
         # 1. Delete feedback first
         db.query(Feedback).filter(
@@ -228,13 +331,17 @@ def delete_assignment(
             Submission.assignment_id == assignment_id
         ).delete(synchronize_session=False)
 
-        # 4. Delete rubric file from disk + rubric record
+        # 4. Delete rubric file from Supabase Storage + rubric record
         rubric = db.query(Rubric).filter(
             Rubric.assignment_id == assignment_id
         ).first()
         if rubric:
-            if rubric.rubric_file_path and os.path.exists(rubric.rubric_file_path):
-                os.remove(rubric.rubric_file_path)
+            if rubric.rubric_file_path and rubric.rubric_file_path.startswith("http"):
+                filename = rubric.rubric_file_path.split("/")[-1]
+                try:
+                    supabase.storage.from_("rubrics").remove([filename])
+                except Exception as e:
+                    print(f"Warning: could not delete rubric file from storage: {e}")
             db.delete(rubric)
             db.flush()
 
@@ -324,6 +431,60 @@ def get_rubric(
     return rubric
 
 
+# @router.post("/assignment/{assignment_id}/rubric/upload", status_code=status.HTTP_200_OK)
+# def upload_rubric_file(
+#     assignment_id: int,
+#     file: UploadFile = File(...),
+#     lecturer: Lecturer = Depends(get_current_lecturer),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     Upload a rubric PDF or DOCX as a reference document for students.
+#     This file is stored on disk only — it is NEVER passed to the AI grader.
+#     Grading is driven solely by the JSON criteria saved in the database.
+#     """
+#     assignment = db.query(AssignmentDB).filter(
+#         AssignmentDB.assignment_id == assignment_id,
+#         AssignmentDB.lecturer_id == lecturer.lecturer_id
+#     ).first()
+#     if not assignment:
+#         raise HTTPException(status_code=404, detail="Assignment not found")
+
+#     rubric = db.query(Rubric).filter(Rubric.assignment_id == assignment_id).first()
+#     if not rubric:
+#         raise HTTPException(
+#             status_code=400,
+#             detail="Please create the rubric criteria first before uploading a rubric file"
+#         )
+
+#     if file.content_type not in ALLOWED_TYPES:
+#         raise HTTPException(
+#             status_code=400,
+#             detail="Only PDF and DOCX files are allowed"
+#         )
+
+#     # Remove old file if one exists
+#     if rubric.rubric_file_path and os.path.exists(rubric.rubric_file_path):
+#         os.remove(rubric.rubric_file_path)
+
+#     os.makedirs(RUBRIC_UPLOAD_DIR, exist_ok=True)
+#     safe_filename = f"{assignment_id}_{file.filename}"
+#     file_path = os.path.join(RUBRIC_UPLOAD_DIR, safe_filename)
+
+#     with open(file_path, "wb") as buffer:
+#         shutil.copyfileobj(file.file, buffer)
+
+#     rubric.rubric_file_name = file.filename
+#     rubric.rubric_file_path = file_path
+#     rubric.rubric_file_type = file.content_type
+#     db.commit()
+
+#     return {
+#         "message": "Rubric reference file uploaded successfully",
+#         "file_name": file.filename,
+#         "file_type": file.content_type
+#     }
+
 @router.post("/assignment/{assignment_id}/rubric/upload", status_code=status.HTTP_200_OK)
 def upload_rubric_file(
     assignment_id: int,
@@ -331,11 +492,6 @@ def upload_rubric_file(
     lecturer: Lecturer = Depends(get_current_lecturer),
     db: Session = Depends(get_db)
 ):
-    """
-    Upload a rubric PDF or DOCX as a reference document for students.
-    This file is stored on disk only — it is NEVER passed to the AI grader.
-    Grading is driven solely by the JSON criteria saved in the database.
-    """
     assignment = db.query(AssignmentDB).filter(
         AssignmentDB.assignment_id == assignment_id,
         AssignmentDB.lecturer_id == lecturer.lecturer_id
@@ -345,37 +501,25 @@ def upload_rubric_file(
 
     rubric = db.query(Rubric).filter(Rubric.assignment_id == assignment_id).first()
     if not rubric:
-        raise HTTPException(
-            status_code=400,
-            detail="Please create the rubric criteria first before uploading a rubric file"
-        )
+        raise HTTPException(status_code=400, detail="Please create the rubric criteria first")
 
     if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF and DOCX files are allowed"
-        )
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are allowed")
 
-    # Remove old file if one exists
-    if rubric.rubric_file_path and os.path.exists(rubric.rubric_file_path):
-        os.remove(rubric.rubric_file_path)
-
-    os.makedirs(RUBRIC_UPLOAD_DIR, exist_ok=True)
+    file_bytes = file.file.read()
     safe_filename = f"{assignment_id}_{file.filename}"
-    file_path = os.path.join(RUBRIC_UPLOAD_DIR, safe_filename)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    public_url = upload_to_supabase(file_bytes, safe_filename, "rubrics")
 
     rubric.rubric_file_name = file.filename
-    rubric.rubric_file_path = file_path
+    rubric.rubric_file_path = public_url
     rubric.rubric_file_type = file.content_type
     db.commit()
 
     return {
-        "message": "Rubric reference file uploaded successfully",
+        "message": "Rubric file uploaded successfully",
         "file_name": file.filename,
-        "file_type": file.content_type
+        "file_type": file.content_type,
+        "url": public_url
     }
 
 
@@ -656,11 +800,13 @@ def generate_feedback_for_submission(
     )
 
     try:
+        question_path = download_to_tmp(getattr(assignment, "question_file_path", None))
+
         result = check_submission_with_files(
             criteria=rubric.criteria,
             submission_file_path=submission.file_path,
             submission_mime_type=submission_mime,
-            question_file_path=getattr(assignment, "question_file_path", None),
+            question_file_path=question_path,
             question_mime_type=getattr(assignment, "question_file_type", None),
             rubric_file_path=None,   # no rubric file — criteria come from DB only
             rubric_mime_type=None,

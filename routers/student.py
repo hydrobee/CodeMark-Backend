@@ -7,6 +7,7 @@ from typing import List, Optional
 from auth import get_current_user
 from datetime import datetime
 from AI.ai_grader import check_code_with_ai, check_submission_with_files
+from supabase_storage import download_to_tmp
 
 import shutil
 import os
@@ -33,6 +34,8 @@ def get_current_student(current_user: User = Depends(get_current_user), db: Sess
 # At the top, update the import:
 from AI.ai_grader import check_code_with_ai, check_submission_with_files
 
+from supabase_storage import download_to_tmp  # add to imports at top of student.py
+
 def run_ai_grading(
     submission_id: int,
     assignment_id: int,
@@ -43,34 +46,34 @@ def run_ai_grading(
     db: Session
 ):
     try:
-        # Fetch the assignment to get question file info
         assignment = db.query(AssignmentDB).filter(
             AssignmentDB.assignment_id == assignment_id
         ).first()
 
-        # Fetch the rubric to get rubric file info
         rubric = db.query(Rubric).filter(
             Rubric.assignment_id == assignment_id
         ).first()
 
-        # Determine submission MIME type from file extension
         _, ext = os.path.splitext(file_path)
         ext = ext.lower()
-        text_exts = {'.py', '.java', '.cpp', '.js', '.c', '.txt'}
         if ext == '.pdf':
             submission_mime = 'application/pdf'
         elif ext == '.docx':
             submission_mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         else:
-            submission_mime = 'text/plain'  # .py, .java, .cpp etc.
+            submission_mime = 'text/plain'
+
+        # Download question/rubric files from Supabase to /tmp before passing to AI
+        question_path = download_to_tmp(assignment.question_file_path if assignment else None)
+        rubric_path = download_to_tmp(rubric.rubric_file_path if rubric else None)
 
         ai_result = check_submission_with_files(
             criteria=criteria,
             submission_file_path=file_path,
             submission_mime_type=submission_mime,
-            question_file_path=assignment.question_file_path if assignment else None,
+            question_file_path=question_path,
             question_mime_type=assignment.question_file_type if assignment else None,
-            rubric_file_path=rubric.rubric_file_path if rubric else None,
+            rubric_file_path=rubric_path,
             rubric_mime_type=rubric.rubric_file_type if rubric else None,
         )
 
@@ -90,7 +93,7 @@ def run_ai_grading(
             strengths=ai_result["strengths"],
             areas_for_improvement=ai_result["improvements"],
             grade=ai_result["score"],
-            rubric_scores=ai_result.get("rubric_scores", []),   # ← NEW
+            rubric_scores=ai_result.get("rubric_scores", []),
             ai_generated=True,
             status="pending",
             released=False
