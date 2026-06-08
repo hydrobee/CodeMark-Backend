@@ -818,10 +818,11 @@ def generate_feedback_for_submission(
 
     try:
         question_path = download_to_tmp(getattr(assignment, "question_file_path", None))
+        submission_path = download_to_tmp(submission.file_path)
 
         result = check_submission_with_files(
             criteria=rubric.criteria,
-            submission_file_path=submission.file_path,
+            submission_file_path=submission_path,
             submission_mime_type=submission_mime,
             question_file_path=question_path,
             question_mime_type=getattr(assignment, "question_file_type", None),
