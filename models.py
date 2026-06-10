@@ -50,6 +50,7 @@ class AssignmentDB(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     deadline = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     # ── Assignment question file (PDF / DOCX) ──────────────────────────────────
     question_file_name = Column(String, nullable=True)
