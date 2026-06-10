@@ -158,6 +158,7 @@ def view_assignments(
             "title": assignment.title,
             "description": assignment.description,
             "deadline": assignment.deadline,
+            "created_at": assignment.created_at,
             "question_file_name": assignment.question_file_name,
             "question_file_path": assignment.question_file_path,
             "question_file_type": assignment.question_file_type,
