@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import User, Student, Lecturer
 from schemas import UserRegister
+from pydantic import BaseModel, EmailStr
 from auth import (
     hash_password,
     verify_password,
@@ -223,3 +224,18 @@ def get_current_user_info(
         "role": current_user.role,
         "role_data": role_data
     }
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    new_password: str
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="No account found with that email")
+
+    user.password = hash_password(data.new_password)
+    db.commit()
+
+    return {"message": "Password reset successfully"}
